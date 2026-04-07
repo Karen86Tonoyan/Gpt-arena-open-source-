@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="GPT Arena – LLM Ensemble",
     description=(
-        "Runs 10 × 7 B arena models in parallel, then synthesises their "
+        "Runs 10 × 7 B arena models in parallel, then synthesizes their "
         "diverse answers into one final response using a 20 B model."
     ),
     version="1.0.0",

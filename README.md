@@ -2,7 +2,7 @@
 
 > **"Ładujemy 10×7B by dostawać różne odpowiedzi a na koniec 20B robi z nich ścianę zgodnych odpowiedzi."**
 >
-> *We run 10 × 7 B-parameter models to collect diverse answers, then a 20 B model synthesises them into one comprehensive final response.*
+> *We run 10 × 7 B-parameter models to collect diverse answers, then a 20 B model synthesizes them into one comprehensive final response.*
 
 ---
 
