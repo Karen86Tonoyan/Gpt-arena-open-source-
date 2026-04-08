@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPT Arena – LLM Ensemble</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0f1117;
+      --surface: #1a1d27;
+      --border:  #2e3147;
+      --accent:  #6c63ff;
+      --accent2: #ff6584;
+      --text:    #e2e4f0;
+      --muted:   #8b8fa8;
+      --success: #4caf50;
+      --error:   #f44336;
+      --radius:  10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      gap: 2rem;
+    }
+
+    header { text-align: center; }
+    header h1 { font-size: 2rem; color: var(--accent); letter-spacing: .05em; }
+    header p  { color: var(--muted); margin-top: .4rem; font-size: .95rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 860px;
+    }
+
+    label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .4rem; }
+
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 1rem;
+      padding: .75rem 1rem;
+      resize: vertical;
+      min-height: 100px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    textarea:focus { border-color: var(--accent); }
+
+    button#run {
+      margin-top: 1rem;
+      width: 100%;
+      padding: .85rem;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+    }
+    button#run:disabled { opacity: .5; cursor: not-allowed; }
+    button#run:hover:not(:disabled) { background: #5751d6; }
+
+    /* status bar */
+    #status {
+      text-align: center;
+      font-size: .9rem;
+      color: var(--muted);
+      min-height: 1.4em;
+    }
+    #status.running { color: var(--accent); }
+    #status.done    { color: var(--success); }
+    #status.err     { color: var(--error); }
+
+    /* arena grid */
+    .arena-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .arena-cell {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+    .arena-cell.has-error { border-color: var(--error); }
+    .arena-cell .chip {
+      font-size: .72rem;
+      color: var(--muted);
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+    .arena-cell .chip span {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+    .arena-cell .answer-text {
+      font-size: .88rem;
+      color: var(--text);
+      line-height: 1.55;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .arena-cell .error-text {
+      font-size: .82rem;
+      color: var(--error);
+    }
+
+    /* synthesis */
+    #synthesis-section { display: none; }
+    #synthesis-section h2 {
+      font-size: 1.15rem;
+      color: var(--accent2);
+      margin-bottom: .75rem;
+    }
+    #synthesis-text {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      white-space: pre-wrap;
+      line-height: 1.7;
+      font-size: .95rem;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚔️ GPT Arena</h1>
+  <p>10 × 7 B models answer in parallel &rarr; one 20 B model synthesizes the final response</p>
+</header>
+
+<!-- Input card -->
+<div class="card">
+  <label for="prompt">Your question / prompt</label>
+  <textarea id="prompt" placeholder="Ask anything…" rows="4"></textarea>
+  <button id="run">Run Ensemble ▶</button>
+</div>
+
+<!-- Status -->
+<div id="status"></div>
+
+<!-- Arena answers -->
+<div class="card" id="arena-section" style="display:none">
+  <h2 style="font-size:1.1rem;color:var(--muted);margin-bottom:.75rem">
+    🤺 Arena – 7 B model responses
+  </h2>
+  <div class="arena-grid" id="arena-grid"></div>
+</div>
+
+<!-- Synthesis -->
+<div class="card" id="synthesis-section">
+  <h2>🧱 Synthesis – 20 B consolidated answer</h2>
+  <div id="synthesis-text"></div>
+</div>
+
+<script>
+  const btn       = document.getElementById('run');
+  const promptEl  = document.getElementById('prompt');
+  const statusEl  = document.getElementById('status');
+  const arenaSection     = document.getElementById('arena-section');
+  const arenaGrid        = document.getElementById('arena-grid');
+  const synthesisSection = document.getElementById('synthesis-section');
+  const synthesisText    = document.getElementById('synthesis-text');
+
+  function setStatus(msg, cls = '') {
+    statusEl.textContent = msg;
+    statusEl.className = cls;
+  }
+
+  function buildArenaCard(answer) {
+    const cell = document.createElement('div');
+    cell.className = 'arena-cell' + (answer.error ? ' has-error' : '');
+
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<span>Slot ${answer.slot + 1}</span><span>temp ${answer.temperature.toFixed(2)}</span>`;
+    cell.appendChild(chip);
+
+    if (answer.error) {
+      const err = document.createElement('div');
+      err.className = 'error-text';
+      err.textContent = '⚠ ' + answer.error;
+      cell.appendChild(err);
+    } else {
+      const txt = document.createElement('div');
+      txt.className = 'answer-text';
+      txt.textContent = answer.text;
+      cell.appendChild(txt);
+    }
+
+    return cell;
+  }
+
+  btn.addEventListener('click', async () => {
+    const prompt = promptEl.value.trim();
+    if (!prompt) { setStatus('Please enter a prompt.', 'err'); return; }
+
+    btn.disabled = true;
+    arenaSection.style.display = 'none';
+    synthesisSection.style.display = 'none';
+    arenaGrid.innerHTML = '';
+    synthesisText.textContent = '';
+    setStatus('⏳ Running 10 arena models…', 'running');
+
+    try {
+      const res = await fetch('/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+
+      const data = await res.json();
+
+      // Populate arena grid
+      data.arena_answers.forEach(a => arenaGrid.appendChild(buildArenaCard(a)));
+      arenaSection.style.display = 'block';
+
+      // Populate synthesis
+      synthesisText.textContent = data.synthesis;
+      synthesisSection.style.display = 'block';
+
+      setStatus(
+        `✅ Done – ${data.arena_success_count}/10 arena answers used for synthesis.`,
+        'done'
+      );
+    } catch (e) {
+      setStatus('❌ Error: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
